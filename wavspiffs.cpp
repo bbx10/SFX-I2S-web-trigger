@@ -61,17 +61,25 @@ int wavOpen(const char *wavname, wavFILE_t *wf, wavProperties_t *wavProps)
                 if (readuint32(wf, &chunkID) != 4) return -3;
                 if (chunkID != CCCC('W', 'A', 'V', 'E')) return -4;
                 state = HEADER_RIFF;
+                Serial.printf("RIFF %d\r\n", chunkSize);
                 break;
 
             case CCCC('f', 'm', 't', ' '):
-                if (wf->f.read((uint8_t *)wavProps, chunkSize) != chunkSize) return -5;
+                if (wf->f.read((uint8_t *)wavProps, sizeof(*wavProps)) !=
+                        sizeof(*wavProps)) return -5;
                 state = HEADER_FMT;
+                Serial.printf("fmt  %d\r\n", chunkSize);
+                if (chunkSize > sizeof(*wavProps)) {
+                    wf->f.seek(chunkSize - sizeof(*wavProps), SeekCur);
+                }
                 break;
 
             case CCCC('d', 'a', 't', 'a'):
                 state = HEADER_DATA;
+                Serial.printf("data %d\r\n", chunkSize);
                 break;
             default:
+                Serial.printf("%08X %d\r\n", chunkID, chunkSize);
                 if (!wf->f.seek(chunkSize, SeekCur)) return -6;
         }
     }
