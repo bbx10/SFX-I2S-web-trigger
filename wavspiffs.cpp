@@ -48,25 +48,44 @@ int wavOpen(const char *wavname, wavFILE_t *wf, wavProperties_t *wavProps)
     } headerState_t;
     headerState_t state = HEADER_INIT;
     uint32_t chunkID, chunkSize;
+    int retval;
 
     wf->f = SPIFFS.open(wavname, "r");
-    if (!wf->f) return -1;
+    if (!wf->f) {
+        retval = -1;
+        goto closeExit;
+    }
     Serial.println("SPIFFS.open ok");
 
     while (state != HEADER_DATA) {
-        if (readuint32(wf, &chunkID) != 4) return -1;
-        if (readuint32(wf, &chunkSize) != 4) return -2;
+        if (readuint32(wf, &chunkID) != 4) {
+            retval = -2;
+            goto closeExit;
+        }
+        if (readuint32(wf, &chunkSize) != 4) {
+            retval = -3;
+            goto closeExit;
+        }
         switch (chunkID) {
             case CCCC('R', 'I', 'F', 'F'):
-                if (readuint32(wf, &chunkID) != 4) return -3;
-                if (chunkID != CCCC('W', 'A', 'V', 'E')) return -4;
+                if (readuint32(wf, &chunkID) != 4) {
+                    retval = -4;
+                    goto closeExit;
+                }
+                if (chunkID != CCCC('W', 'A', 'V', 'E')) {
+                    retval = -5;
+                    goto closeExit;
+                }
                 state = HEADER_RIFF;
                 Serial.printf("RIFF %d\r\n", chunkSize);
                 break;
 
             case CCCC('f', 'm', 't', ' '):
                 if (wf->f.read((uint8_t *)wavProps, sizeof(*wavProps)) !=
-                        sizeof(*wavProps)) return -5;
+                        sizeof(*wavProps)) {
+                    retval = -6;
+                    goto closeExit;
+                }
                 state = HEADER_FMT;
                 Serial.printf("fmt  %d\r\n", chunkSize);
                 if (chunkSize > sizeof(*wavProps)) {
@@ -80,12 +99,17 @@ int wavOpen(const char *wavname, wavFILE_t *wf, wavProperties_t *wavProps)
                 break;
             default:
                 Serial.printf("%08X %d\r\n", chunkID, chunkSize);
-                if (!wf->f.seek(chunkSize, SeekCur)) return -6;
+                if (!wf->f.seek(chunkSize, SeekCur)) {
+                    retval = -7;
+                    goto closeExit;
+                }
         }
     }
     if (state == HEADER_DATA) return 0;
+    retval = -8;
+closeExit:
     wf->f.close();
-    return -7;
+    return retval;
 }
 
 int wavRead(wavFILE_t *wf, void *buffer, size_t buflen)
